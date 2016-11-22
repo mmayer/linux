@@ -163,6 +163,7 @@
 /* Other AVS related constants */
 #define AVS_LOOP_LIMIT		10000
 #define AVS_TIMEOUT		300 /* in ms; expected completion is < 10ms */
+#define AVS_TRANSITION_LATENCY	5 * 1000 * 1000 /* 5 ms */
 #define AVS_FIRMWARE_MAGIC	0xa11600d1
 
 #define BRCM_AVS_CPUFREQ_PREFIX	"brcmstb-avs"
@@ -903,14 +904,11 @@ static int brcm_avs_cpufreq_init(struct cpufreq_policy *policy)
 		return ret;
 	}
 
-	ret = cpufreq_table_validate_and_show(policy, freq_table);
+	ret = cpufreq_generic_init(policy, freq_table, AVS_TRANSITION_LATENCY);
 	if (ret) {
-		dev_err(dev, "invalid frequency table: %d\n", ret);
+		dev_err(dev, "cpufreq_generic_init() failed -- %d\n", ret);
 		return ret;
 	}
-
-	/* All cores share the same clock and thus the same policy. */
-	cpumask_setall(policy->cpus);
 
 	ret = __issue_avs_command(priv, AVS_CMD_ENABLE, false, NULL);
 	if (!ret) {
@@ -918,7 +916,6 @@ static int brcm_avs_cpufreq_init(struct cpufreq_policy *policy)
 
 		ret = brcm_avs_get_pstate(priv, &pstate);
 		if (!ret) {
-			policy->cur = freq_table[pstate].frequency;
 			dev_info(dev, "registered\n");
 			return 0;
 		}
